@@ -15,7 +15,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-if ( ! defined( 'WLD_VERSION' ) )     define( 'WLD_VERSION',     '1.0.0' );
+if ( ! defined( 'WLD_VERSION' ) )     define( 'WLD_VERSION',     '1.0.3' );
 if ( ! defined( 'WLD_DB_VERSION' ) )  define( 'WLD_DB_VERSION',  '1.0' );
 if ( ! defined( 'WLD_PLUGIN_DIR' ) )  define( 'WLD_PLUGIN_DIR',  plugin_dir_path( __FILE__ ) );
 if ( ! defined( 'WLD_PLUGIN_URL' ) )  define( 'WLD_PLUGIN_URL',  plugin_dir_url( __FILE__ ) );

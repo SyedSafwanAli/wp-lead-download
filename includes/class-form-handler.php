@@ -12,6 +12,8 @@ class WLD_Form_Handler {
 		add_action( 'wp_ajax_nopriv_wld_resend_otp',        [ __CLASS__, 'handle_resend_otp' ] );
 		add_action( 'wp_ajax_wld_returning_user',           [ __CLASS__, 'handle_returning_user' ] );
 		add_action( 'wp_ajax_nopriv_wld_returning_user',    [ __CLASS__, 'handle_returning_user' ] );
+		add_action( 'wp_ajax_wld_download_file',            [ __CLASS__, 'handle_download_file' ] );
+		add_action( 'wp_ajax_nopriv_wld_download_file',     [ __CLASS__, 'handle_download_file' ] );
 	}
 
 	// -------------------------------------------------------------------------
@@ -274,6 +276,88 @@ class WLD_Form_Handler {
 			'file_url' => esc_url( $file_url ),
 			'message'  => $thank_you ?: __( 'Thank you! Your download is starting.', 'wp-lead-download' ),
 		] );
+	}
+
+	// -------------------------------------------------------------------------
+	// wld_download_file — stream file with Content-Disposition: attachment
+	// -------------------------------------------------------------------------
+	public static function handle_download_file() {
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'wld_nonce' ) ) {
+			status_header( 403 );
+			exit;
+		}
+
+		$email       = isset( $_POST['email'] )       ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+		$download_id = isset( $_POST['download_id'] ) ? absint( $_POST['download_id'] )                 : 0;
+
+		if ( ! is_email( $email ) || ! $download_id ) {
+			status_header( 400 );
+			exit;
+		}
+
+		// Confirm this email has a verified lead for this download.
+		global $wpdb;
+		$exists = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->prefix}wld_leads
+				 WHERE email = %s AND download_id = %d",
+				$email,
+				$download_id
+			)
+		);
+
+		if ( ! $exists ) {
+			status_header( 403 );
+			exit;
+		}
+
+		$file_url = get_post_meta( $download_id, '_wld_file_url', true );
+		if ( empty( $file_url ) ) {
+			status_header( 404 );
+			exit;
+		}
+
+		// Convert URL → absolute server path.
+		$upload_dir = wp_upload_dir();
+		$file_path  = str_replace(
+			trailingslashit( $upload_dir['baseurl'] ),
+			trailingslashit( $upload_dir['basedir'] ),
+			$file_url
+		);
+
+		// Fallback: try replacing site root URL with ABSPATH.
+		if ( ! file_exists( $file_path ) ) {
+			$file_path = str_replace(
+				trailingslashit( site_url() ),
+				trailingslashit( ABSPATH ),
+				$file_url
+			);
+		}
+
+		if ( ! file_exists( $file_path ) || ! is_readable( $file_path ) ) {
+			status_header( 404 );
+			exit;
+		}
+
+		$filename  = basename( $file_path );
+		$file_size = filesize( $file_path );
+		$mime      = function_exists( 'mime_content_type' )
+			? mime_content_type( $file_path )
+			: 'application/octet-stream';
+
+		// Force download — browser must save the file, not open it.
+		if ( ob_get_level() ) {
+			ob_end_clean();
+		}
+
+		nocache_headers();
+		header( 'Content-Type: ' . $mime );
+		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+		header( 'Content-Transfer-Encoding: binary' );
+		header( 'Content-Length: ' . $file_size );
+
+		readfile( $file_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile
+		exit;
 	}
 
 	// -------------------------------------------------------------------------

@@ -76,16 +76,42 @@
 	}
 
 	/* ------------------------------------------------------------------
-	   Helpers: force-download a same-origin file via hidden <a>
+	   Helpers: force-download via PHP proxy (streams with Content-Disposition)
+	   Works for all file types including PDFs on all browsers/hosts.
 	------------------------------------------------------------------ */
-	function forceDownload( url ) {
-		var a = document.createElement( 'a' );
-		a.href        = url;
-		a.download    = '';
-		a.style.display = 'none';
-		document.body.appendChild( a );
-		a.click();
-		setTimeout( function () { document.body.removeChild( a ); }, 1000 );
+	function forceDownload( downloadId, email ) {
+		var fd = new FormData();
+		fd.append( 'action',      'wld_download_file' );
+		fd.append( 'nonce',       wld_vars.nonce );
+		fd.append( 'download_id', downloadId );
+		fd.append( 'email',       email );
+
+		fetch( wld_vars.ajax_url, { method: 'POST', body: fd } )
+			.then( function ( r ) {
+				// Extract filename from Content-Disposition header if present.
+				var disposition = r.headers.get( 'Content-Disposition' ) || '';
+				var match       = disposition.match( /filename[^;=\n]*=(['"]?)([^'"\n]+)\1/ );
+				var filename    = match ? match[2] : 'download';
+				return r.blob().then( function ( blob ) {
+					return { blob: blob, filename: filename };
+				} );
+			} )
+			.then( function ( result ) {
+				var url = URL.createObjectURL( result.blob );
+				var a   = document.createElement( 'a' );
+				a.href           = url;
+				a.download       = result.filename;
+				a.style.display  = 'none';
+				document.body.appendChild( a );
+				a.click();
+				setTimeout( function () {
+					URL.revokeObjectURL( url );
+					document.body.removeChild( a );
+				}, 1000 );
+			} )
+			.catch( function () {
+				// Silent fail — file not accessible.
+			} );
 	}
 
 	/* ------------------------------------------------------------------
@@ -228,8 +254,8 @@
 					'wld_returning_user',
 					{ email: savedEmail, download_id: downloadId },
 					function ( data ) {
-						// Confirmed in DB — direct download, no modal
-						forceDownload( data.file_url );
+						// Confirmed in DB — direct download via PHP proxy
+						forceDownload( downloadId, savedEmail );
 					},
 					function () {
 						// Not found in DB (e.g. different device/browser) — open modal
@@ -360,9 +386,9 @@
 
 				showScreen( 3 );
 
-				// Force-download the file after a short delay
+				// Force-download via PHP proxy after a short delay
 				setTimeout( function () {
-					forceDownload( currentFileUrl );
+					forceDownload( downloadId, email );
 				}, 800 );
 			},
 			function ( msg ) {
