@@ -318,23 +318,31 @@ class WLD_Form_Handler {
 		}
 
 		// Convert URL → absolute server path.
-		$upload_dir = wp_upload_dir();
-		$file_path  = str_replace(
-			trailingslashit( $upload_dir['baseurl'] ),
-			trailingslashit( $upload_dir['basedir'] ),
-			$file_url
-		);
+		// Uses parse_url() on the URL path only — immune to HTTP/HTTPS mismatches
+		// and domain differences that break simple str_replace approaches.
+		$parsed    = wp_parse_url( $file_url );
+		$url_path  = isset( $parsed['path'] ) ? $parsed['path'] : '';
+		$file_path = '';
 
-		// Fallback: try replacing site root URL with ABSPATH.
-		if ( ! file_exists( $file_path ) ) {
-			$file_path = str_replace(
-				trailingslashit( site_url() ),
-				trailingslashit( ABSPATH ),
-				$file_url
-			);
+		if ( $url_path ) {
+			// Method 1: strip site path prefix, prepend ABSPATH.
+			$site_path = wp_parse_url( site_url(), PHP_URL_PATH );
+			$site_path = $site_path ? trailingslashit( $site_path ) : '/';
+			$rel_path  = ltrim( str_replace( rtrim( $site_path, '/' ), '', $url_path ), '/' );
+			$file_path = rtrim( ABSPATH, '/' ) . '/' . $rel_path;
 		}
 
-		if ( ! file_exists( $file_path ) || ! is_readable( $file_path ) ) {
+		// Method 2: uploads dir mapping (more precise for media library files).
+		if ( ! file_exists( $file_path ) ) {
+			$upload_dir = wp_upload_dir();
+			$base_url   = set_url_scheme( trailingslashit( $upload_dir['baseurl'] ), 'https' );
+			$file_url_s = set_url_scheme( $file_url, 'https' );
+			if ( strpos( $file_url_s, $base_url ) === 0 ) {
+				$file_path = $upload_dir['basedir'] . '/' . ltrim( str_replace( $base_url, '', $file_url_s ), '/' );
+			}
+		}
+
+		if ( empty( $file_path ) || ! file_exists( $file_path ) || ! is_readable( $file_path ) ) {
 			status_header( 404 );
 			exit;
 		}

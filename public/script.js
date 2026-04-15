@@ -37,7 +37,6 @@
 	/* ------------------------------------------------------------------
 	   State
 	------------------------------------------------------------------ */
-	var currentFileUrl = '';
 	var currentEmail   = '';
 	var countdownTimer = null;
 	var previousFocus  = null;
@@ -76,42 +75,50 @@
 	}
 
 	/* ------------------------------------------------------------------
-	   Helpers: force-download via PHP proxy (streams with Content-Disposition)
-	   Works for all file types including PDFs on all browsers/hosts.
+	   Helpers: force-download via hidden form + hidden iframe.
+	   POST goes to the PHP proxy which responds with Content-Disposition: attachment.
+	   Works in ALL browsers including Safari — no fetch/blob/popup issues.
 	------------------------------------------------------------------ */
 	function forceDownload( downloadId, email ) {
-		var fd = new FormData();
-		fd.append( 'action',      'wld_download_file' );
-		fd.append( 'nonce',       wld_vars.nonce );
-		fd.append( 'download_id', downloadId );
-		fd.append( 'email',       email );
+		var frameName = 'wld_dl_' + Date.now();
 
-		fetch( wld_vars.ajax_url, { method: 'POST', body: fd } )
-			.then( function ( r ) {
-				// Extract filename from Content-Disposition header if present.
-				var disposition = r.headers.get( 'Content-Disposition' ) || '';
-				var match       = disposition.match( /filename[^;=\n]*=(['"]?)([^'"\n]+)\1/ );
-				var filename    = match ? match[2] : 'download';
-				return r.blob().then( function ( blob ) {
-					return { blob: blob, filename: filename };
-				} );
-			} )
-			.then( function ( result ) {
-				var url = URL.createObjectURL( result.blob );
-				var a   = document.createElement( 'a' );
-				a.href           = url;
-				a.download       = result.filename;
-				a.style.display  = 'none';
-				document.body.appendChild( a );
-				a.click();
-				setTimeout( function () {
-					URL.revokeObjectURL( url );
-					document.body.removeChild( a );
-				}, 1000 );
-			} )
-			.catch( function () {
-				// Silent fail — file not accessible.
-			} );
+		// Hidden iframe — receives the file response without navigating the page.
+		var iframe = document.createElement( 'iframe' );
+		iframe.name             = frameName;
+		iframe.style.display    = 'none';
+		iframe.style.width      = '0';
+		iframe.style.height     = '0';
+		document.body.appendChild( iframe );
+
+		// Hidden form — posts credentials to the PHP download endpoint.
+		var form    = document.createElement( 'form' );
+		form.method = 'POST';
+		form.action = wld_vars.ajax_url;
+		form.target = frameName;
+
+		var fields = {
+			action:      'wld_download_file',
+			nonce:       wld_vars.nonce,
+			download_id: downloadId,
+			email:       email
+		};
+
+		Object.keys( fields ).forEach( function ( key ) {
+			var input   = document.createElement( 'input' );
+			input.type  = 'hidden';
+			input.name  = key;
+			input.value = fields[ key ];
+			form.appendChild( input );
+		} );
+
+		document.body.appendChild( form );
+		form.submit();
+
+		// Clean up after the download has had time to start.
+		setTimeout( function () {
+			if ( form.parentNode )   form.parentNode.removeChild( form );
+			if ( iframe.parentNode ) iframe.parentNode.removeChild( iframe );
+		}, 10000 );
 	}
 
 	/* ------------------------------------------------------------------
@@ -253,7 +260,7 @@
 				doAjax(
 					'wld_returning_user',
 					{ email: savedEmail, download_id: downloadId },
-					function ( data ) {
+					function () {
 						// Confirmed in DB — direct download via PHP proxy
 						forceDownload( downloadId, savedEmail );
 					},
@@ -376,9 +383,8 @@
 		doAjax(
 			'wld_verify_otp',
 			{ download_id: downloadId, email: email, otp_code: otpCode },
-			function ( data ) {
+			function () {
 				setLoading( s2Submit, false );
-				currentFileUrl = data.file_url;
 
 				// Remember this email and mark this download as completed
 				saveEmail( email );
@@ -487,7 +493,6 @@
 		setLoading( s1Submit, false );
 		setLoading( s2Submit, false );
 		clearInterval( countdownTimer );
-		currentFileUrl = '';
 		currentEmail   = '';
 		if ( testOtpBox )  testOtpBox.style.display = 'none';
 		if ( testOtpCode ) testOtpCode.textContent  = '';
