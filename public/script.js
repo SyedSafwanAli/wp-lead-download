@@ -396,6 +396,11 @@
 				setTimeout( function () {
 					forceDownload( downloadId, email );
 				}, 800 );
+
+				// Auto-close modal after 12 seconds
+				setTimeout( function () {
+					closeModal();
+				}, 12000 );
 			},
 			function ( msg ) {
 				setLoading( s2Submit, false );
