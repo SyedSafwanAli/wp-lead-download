@@ -28,12 +28,12 @@ class WLD_Form_Handler {
 		$phone       = isset( $_POST['phone'] )       ? sanitize_text_field( wp_unslash( $_POST['phone'] ) )        : '';
 
 		// Validate
-		if ( ! $download_id || ! is_email( $email ) || empty( $full_name ) || empty( $phone ) ) {
+		if ( ! $download_id || ! is_email( $email ) || empty( $full_name ) ) {
 			wp_send_json_error( [ 'message' => __( 'Please fill in all required fields.', 'wp-lead-download' ) ] );
 		}
 
 		$phone = preg_replace( '/[^0-9+\-\s()]/', '', $phone );
-		if ( strlen( $phone ) < 7 ) {
+		if ( ! empty( $phone ) && strlen( $phone ) < 7 ) {
 			wp_send_json_error( [ 'message' => __( 'Please enter a valid phone number.', 'wp-lead-download' ) ] );
 		}
 

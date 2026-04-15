@@ -44,13 +44,12 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 				</div>
 
 				<div class="wld-field">
-					<label for="wld-phone"><?php esc_html_e( 'Phone Number', 'wp-lead-download' ); ?> *</label>
+					<label for="wld-phone"><?php esc_html_e( 'Phone Number', 'wp-lead-download' ); ?></label>
 					<input type="tel"
 					       name="phone"
 					       id="wld-phone"
-					       required
 					       autocomplete="tel"
-					       placeholder="<?php esc_attr_e( '03001234567', 'wp-lead-download' ); ?>">
+					       placeholder="<?php esc_attr_e( 'Optional', 'wp-lead-download' ); ?>">
 				</div>
 
 				<button type="submit" class="wld-btn" id="wld-s1-submit" aria-describedby="wld-s1-error">
