@@ -240,6 +240,7 @@
 
 	/* ------------------------------------------------------------------
 	   Button click — returning user shortcut or normal modal flow
+	   UPDATED: Returning users skip form for ANY document (not just previously downloaded)
 	------------------------------------------------------------------ */
 	document.addEventListener( 'click', function ( e ) {
 		var btn = e.target.closest( '.wld-trigger-btn' );
@@ -255,8 +256,8 @@
 		fetchNonce( function () {
 			var savedEmail = getSavedEmail();
 
-			// Returning user: same email already downloaded this exact file
-			if ( savedEmail && hasDownloadedBefore( downloadId ) ) {
+			// Returning user: Email already verified → direct download ANY document
+			if ( savedEmail ) {
 				doAjax(
 					'wld_returning_user',
 					{ email: savedEmail, download_id: downloadId },
@@ -265,14 +266,14 @@
 						forceDownload( downloadId, savedEmail );
 					},
 					function () {
-						// Not found in DB (e.g. different device/browser) — open modal
+						// Email not in DB for this download — open modal
 						openModal( downloadId, formTitle, thankYou, btnColor );
 					}
 				);
 				return;
 			}
 
-			// First-time or different download — open modal (email pre-filled if known)
+			// First-time user — open modal
 			openModal( downloadId, formTitle, thankYou, btnColor );
 		} );
 	} );

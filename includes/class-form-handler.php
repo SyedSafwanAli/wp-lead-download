@@ -237,7 +237,8 @@ class WLD_Form_Handler {
 	}
 
 	// -------------------------------------------------------------------------
-	// wld_returning_user — check if email already has a lead, return file URL
+	// wld_returning_user — check if email verified once, allow ANY document download
+	// UPDATED: Once verified, user can download any document without re-entering form
 	// -------------------------------------------------------------------------
 	public static function handle_returning_user() {
 		check_ajax_referer( 'wld_nonce', 'nonce' );
@@ -250,16 +251,16 @@ class WLD_Form_Handler {
 		}
 
 		global $wpdb;
-		$exists = (int) $wpdb->get_var(
+
+		// Check if this email has ANY verified download (not specific to download_id)
+		$email_verified = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->prefix}wld_leads
-				 WHERE email = %s AND download_id = %d",
-				$email,
-				$download_id
+				"SELECT COUNT(*) FROM {$wpdb->prefix}wld_leads WHERE email = %s",
+				$email
 			)
 		);
 
-		if ( ! $exists ) {
+		if ( ! $email_verified ) {
 			wp_send_json_error( [ 'status' => 'not_found' ] );
 		}
 
@@ -268,6 +269,31 @@ class WLD_Form_Handler {
 
 		if ( empty( $file_url ) || ! filter_var( $file_url, FILTER_VALIDATE_URL ) ) {
 			wp_send_json_error( [ 'status' => 'no_file' ] );
+		}
+
+		// Auto-record this new download for the returning user
+		$already_downloaded = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->prefix}wld_leads WHERE email = %s AND download_id = %d",
+				$email,
+				$download_id
+			)
+		);
+
+		if ( ! $already_downloaded ) {
+			$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( $_SERVER['REMOTE_ADDR'] ) : '';
+			$wpdb->insert(
+				$wpdb->prefix . 'wld_leads',
+				[
+					'download_id'   => $download_id,
+					'full_name'     => '',
+					'email'         => $email,
+					'phone'         => '',
+					'downloaded_at' => current_time( 'mysql' ),
+					'ip_address'    => $ip,
+				],
+				[ '%d', '%s', '%s', '%s', '%s', '%s' ]
+			);
 		}
 
 		$thank_you = get_post_meta( $download_id, '_wld_thank_you_msg', true );
